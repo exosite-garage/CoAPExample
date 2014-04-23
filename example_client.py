@@ -20,8 +20,7 @@ PORT = 5683
 msg = coap.Message(mtype=coap.CON, mid=0x37, code=coap.GET)
 
 # Set the path to "/a1/1", where the format is "/a1/<datasource alias>".
-#msg.opt.uri_path = ('1a', ALIAS,)              # The Right Way
-msg.opt.uri_path = ('/1a/{}'.format(ALIAS),)   # What the server needs for now.
+msg.opt.uri_path = ('1a', ALIAS,)
 
 # Encode the CIK to binary 
 msg.opt.uri_query = (binascii.a2b_hex(CIK),)
