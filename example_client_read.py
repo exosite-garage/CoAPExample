@@ -19,11 +19,13 @@ PORT = 5683
 # Create a New Conformable GET CoAP Request with Message ID 0x37.
 msg = coap.Message(mtype=coap.CON, mid=0x37, code=coap.GET)
 
-# Set the path to "/a1/1", where the format is "/a1/<datasource alias>".
-msg.opt.uri_path = ('1a', ALIAS,)
+# Set the path where the format is "/1a/<datasource alias>".
+msg.opt.uri_path = ('1a', ALIAS, )
 
-# Encode the CIK to binary 
+# Encode the CIK to binary to save data
 msg.opt.uri_query = (binascii.a2b_hex(CIK),)
+
+
 
 print("Sending Message: {}".format(binascii.b2a_hex(msg.encode())))
 print(coap.humanFormatMessage(msg))
