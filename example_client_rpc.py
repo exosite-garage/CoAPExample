@@ -65,6 +65,8 @@ sock = socket.socket(socket.AF_INET, # Internet
 # Encode and Send Message
 sock.sendto(msg.encode(), (SERVER, PORT))
 
+body = b""
+
 while True:
 	# Wait for Response
 	data, addr = sock.recvfrom(2048) # maximum packet size is 1500 bytes
