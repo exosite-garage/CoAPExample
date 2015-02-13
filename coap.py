@@ -12,6 +12,7 @@ import random
 import copy
 import struct
 import collections
+import binascii
 from itertools import chain
 
 
@@ -176,6 +177,10 @@ responses = {65: '2.01 Created',
 
 responses_rev = {v:k for k, v in responses.items()}
 
+codes = dict({0: "EMPTY"}.items() + requests.items() + responses.items())
+
+codes_rev = {v:k for k, v in codes.items()}
+
 #=============================================================================
 # coap-18, block-14, observe-11
 #=============================================================================
@@ -260,6 +265,16 @@ media_types = {0: 'text/plain',
 
 media_types_rev = {v:k for k, v in media_types.items()}
 
+MESSAGE_FORMAT = \
+"""------------ COAP Message ------------ 
+Version:       {}
+Type:          {} ({})
+Code:          {} ({})
+Message_id:    {}
+Token:         {}
+{}
+Payload:       ({} bytes)
+{}"""
 
 class Message(object):
     """A CoAP Message."""
@@ -280,6 +295,19 @@ class Message(object):
 
         if self.payload is None:
             raise TypeError("Payload must not be None. Use empty string instead.")
+
+    def __str__(self):
+        return MESSAGE_FORMAT.format(self.version,
+                                     types[self.mtype],
+                                     self.mtype,
+                                     codes[self.code],
+                                     "{}.{:02}".format(self.code >> 5, self.code & 0x1f),
+                                     self.mid,
+                                     self.token or "<None>",
+                                     self.opt.__str__(),
+                                     len(self.payload),
+                                     self.payload)
+
 
     @classmethod
     def decode(cls, rawdata, remote=None, protocol=None):
@@ -391,11 +419,13 @@ class Message(object):
             response.opt.block1 = (self.opt.block1.block_number, True, self.opt.block1.size_exponent)
         return response
 
-
 class Options(object):
     """Represent CoAP Header Options."""
     def __init__(self):
         self._options = {}
+
+    def __str__(self):
+        return "\n".join([opt.__str__() for opt in self.optionList()])
 
     def decode(self, rawdata):
         """Decode all options in message from raw binary data."""
@@ -615,6 +645,14 @@ def writeExtendedFieldValue(value):
         raise ValueError("Value out of range.")
 
 
+
+OPTION_FORMAT = \
+"""Option Number: {} ({})
+      Value:   {}
+      Crit:    {}
+      Unsafe:  {}
+      NCacheK: {}"""
+
 class StringOption(object):
     """String CoAP option - used to represent string and opaque options."""
 
@@ -622,12 +660,29 @@ class StringOption(object):
         self.value = value
         self.number = number
 
+    def __str__(self):
+        return OPTION_FORMAT.format(options[self.number],
+                                    self.number,
+                                    self.value if isValidUTF8(self.value) else "0x"+binascii.b2a_hex(self.value),
+                                    self.critical(),
+                                    self.unsafe(),
+                                    self.nocachekey())
+
     def encode(self):
         rawdata = self.value
         return rawdata
 
     def decode(self, rawdata):
         self.value = rawdata  # if rawdata is not None else ""
+
+    def critical(self):
+        return self.number & 1 == 1
+
+    def unsafe(self):
+        return self.number & 2 == 2
+
+    def nocachekey(self):
+        return (self.number & 0x1e) == 0x1c
 
     def _length(self):
         return len(self.value)
@@ -641,6 +696,14 @@ class UintOption(object):
         self.value = value
         self.number = number
 
+    def __str__(self):
+        return OPTION_FORMAT.format(options[self.number],
+                                    self.number,
+                                    self.value,
+                                    self.critical(),
+                                    self.unsafe(),
+                                    self.nocachekey())
+
     def encode(self):
         rawdata = struct.pack("!L", self.value)  # For Python >3.1 replace with int.to_bytes()
         return rawdata.lstrip(chr(0))
@@ -651,6 +714,16 @@ class UintOption(object):
             value = (value * 256) + ord(byte)
         self.value = value
         return self
+
+    def critical(self):
+        return self.number & 1 == 1
+
+    def unsafe(self):
+        return self.number & 2 == 2
+
+    def nocachekey(self):
+        return (self.number & 0x1e) == 0x1c
+
 
     def _length(self):
         if self.value > 0:
@@ -670,6 +743,14 @@ class BlockOption(object):
         self.value = self.BlockwiseTuple._make(value)
         self.number = number
 
+    def __str__(self):
+        return OPTION_FORMAT.format(options[self.number],
+                                    self.number,
+                                    "{}/{}/{}".format(self.value[0],self.value[1],self.value[2]),
+                                    self.critical(),
+                                    self.unsafe(),
+                                    self.nocachekey())
+
     def encode(self):
         as_integer = (self.value[0] << 4) + (self.value[1] * 0x08) + self.value[2]
         rawdata = struct.pack("!L", as_integer)  # For Python >3.1 replace with int.to_bytes()
@@ -679,7 +760,17 @@ class BlockOption(object):
         as_integer = 0
         for byte in rawdata:
             as_integer = (as_integer * 256) + ord(byte)
-        self.value = self.BlockwiseTuple(block_number=(as_integer >> 4), more=bool(as_integer & 0x08), size_exponent=(as_integer & 0x07))
+        self.value = self.BlockwiseTuple(block_number=(as_integer >> 4), more=((as_integer >> 3) & 0x01), size_exponent=(as_integer & 0x07))
+
+    def critical(self):
+        return self.number & 1 == 1
+
+    def unsafe(self):
+        return self.number & 2 == 2
+
+    def nocachekey(self):
+        return (self.number & 0x1e) == 0x1c
+
 
     def _length(self):
         return ((self.value[0].bit_length() + 3) / 8 + 1)
@@ -711,13 +802,10 @@ def isSuccessful(code):
 def uriPathAsString(segment_list):
     return '/' + '/'.join(segment_list)
 
-def humanFormatMessage(msg):
+def isValidUTF8(to_check):
     try:
-        print("Message Type:    {}".format(types[msg.mtype]))
-        print("Message Id:      0x{}".format(msg.mid))
-        print("Message Code:    {}".format(responses[msg.code]))
-        print("Message Token:   0x{}".format(msg.token))
-        print("Message Options: {}".format(msg.opt))
-        print("Message Payload: {}".format(msg.payload))
-    except KeyError:
-        print("Improperly Formatted Message!")
+        to_check.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
+    else:
+        return True

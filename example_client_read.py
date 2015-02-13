@@ -27,8 +27,8 @@ msg.opt.uri_query = (binascii.a2b_hex(CIK),)
 
 
 
-print("Sending Message: {}".format(binascii.b2a_hex(msg.encode())))
-print(coap.humanFormatMessage(msg))
+print("------------ Send Message ------------")
+print(msg)
 
 # Setup Socket as UDP
 sock = socket.socket(socket.AF_INET, # Internet
@@ -42,5 +42,5 @@ data, addr = sock.recvfrom(2048) # maximum packet size is 1500 bytes
 
 # Decode and Display Response
 recv_msg = coap.Message.decode(data)
-print("Received Message: {}".format(binascii.b2a_hex(data)))
-print(coap.humanFormatMessage(recv_msg))
+print("------------ Recv Message ------------")
+print(recv_msg)
