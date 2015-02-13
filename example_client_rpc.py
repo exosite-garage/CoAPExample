@@ -65,8 +65,6 @@ sock = socket.socket(socket.AF_INET, # Internet
 # Encode and Send Message
 sock.sendto(msg.encode(), (SERVER, PORT))
 
-body = b""
-
 while True:
 	# Wait for Response
 	data, addr = sock.recvfrom(2048) # maximum packet size is 1500 bytes
@@ -77,14 +75,17 @@ while True:
 	print(recv_msg)
 	body += recv_msg.payload
 
+	# Only Continue Requests if Sever Says There's More
 	if recv_msg.opt.block2 == None or recv_msg.opt.block2[1] == 0:
 		break
 
+	# Update Request to Ask for Next Block
 	msg.opt.block2 = (recv_msg.opt.block2[0] + 1, 0, recv_msg.opt.block2[2])
 
 	# Encode and Send Message
 	sock.sendto(msg.encode(), (SERVER, PORT))
 
+# Decode CBOR Response to Python Object
 response = cbor.loads(body)
 
 # Print the RPC Response in JSON-like Format
